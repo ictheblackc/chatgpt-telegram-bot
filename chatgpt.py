@@ -122,7 +122,7 @@ class ChatGPT:
         return '\n'.join(lines)
 
     @classmethod
-    def answer_index(cls, system, topic, search_index, temp=1, verbose=1):
+    def answer_index(cls, system, topic, search_index, temp=1, verbose=0):
         """Select text by similarity with the query."""
         docs = search_index.similarity_search(topic, k=5)
         message_content = re.sub(r'\n{2}', ' ', '\n '.join(
