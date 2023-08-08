@@ -1,213 +1,17 @@
-import os
 import sqlite3
-import re
-import requests
-import openai
-import tiktoken
 import time
-from config import BOT_TOKEN, PROVIDER_TOKEN, OPENAI_API_KEY, DOCUMENT
-from langchain.docstore.document import Document
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import Chroma
 from telebot import TeleBot
 from telebot import types
 from telebot.types import LabeledPrice
+from config import *
+from database import database as db
+from chatgpt import chatgpt as gpt
 
 
-class GPT():
-    def __init__(self):
-        pass
-
-    @classmethod
-    def set_key(cls):
-        openai.api_key = OPENAI_API_KEY
-        os.environ['OPENAI_API_KEY'] = openai.api_key
-        print(f'API key was saved successfully')
-
-    def load_search_indexes(self, url: str) -> Chroma:
-        # Extract the document ID from the URL
-        match_ = re.search('/document/d/([a-zA-Z0-9-_]+)', url)
-        if match_ is None:
-            raise ValueError('Invalid Google Docs URL')
-        doc_id = match_.group(1)
-
-        # Download the document as plain text
-        response = requests.get(f'https://docs.google.com/document/d/{doc_id}/export?format=txt')
-        response.raise_for_status()
-        text = response.text
-        return self.create_embedding(text)
-
-    def load_prompt(self, url: str) -> str:
-        # Extract the document ID from the URL
-        match_ = re.search('/document/d/([a-zA-Z0-9-_]+)', url)
-        if match_ is None:
-            raise ValueError('Invalid Google Docs URL')
-        doc_id = match_.group(1)
-
-        # Download the document as plain text
-        response = requests.get(f'https://docs.google.com/document/d/{doc_id}/export?format=txt')
-        response.raise_for_status()
-        text = response.text
-        return f'{text}'
-
-    def create_embedding(self, data):
-        def num_tokens_from_string(string: str, encoding_name: str) -> int:
-            """Returns the number of tokens in a text string."""
-            encoding = tiktoken.get_encoding(encoding_name)
-            num_tokens = len(encoding.encode(string))
-            return num_tokens
-
-        source_chunks = []
-        splitter = CharacterTextSplitter(separator="\n", chunk_size=1024, chunk_overlap=0)
-
-        for chunk in splitter.split_text(data):
-            source_chunks.append(Document(page_content=chunk, metadata={}))
-
-        search_index = Chroma.from_documents(source_chunks, OpenAIEmbeddings(), )
-
-        count_token = num_tokens_from_string(' '.join([x.page_content for x in source_chunks]), 'cl100k_base')
-        print('Number of tokens in the document:', count_token)
-        print('Approximate cost of the request:', 0.0004 * (count_token / 1000), '$')
-        return search_index
-
-    def answer(self, system, topic, temp=1):
-        messages = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": topic}
-        ]
-
-        completion = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=temp
-        )
-
-        return completion.choices[0].message.content
-
-    def num_tokens_from_messages(self, messages, model="gpt-3.5-turbo-0301"):
-        """Returns the number of tokens used by a list of messages."""
-        try:
-            encoding = tiktoken.encoding_for_model(model)
-        except KeyError:
-            encoding = tiktoken.get_encoding("cl100k_base")
-        if model == "gpt-3.5-turbo-0301":  # note: future models may deviate from this
-            num_tokens = 0
-            for message in messages:
-                num_tokens += 4  # every message follows <im_start>{role/name}\n{content}<im_end>\n
-                for key, value in message.items():
-                    num_tokens += len(encoding.encode(value))
-                    if key == "name":  # if there's a name, the role is omitted
-                        num_tokens += -1  # role is always required and always 1 token
-            num_tokens += 2  # every reply is primed with <im_start>assistant
-            return num_tokens
-        else:
-            raise NotImplementedError(f"""num_tokens_from_messages() is not presently implemented for model {model}.
-See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.""")
-
-    def insert_newlines(self, text: str, max_len: int = 170) -> str:
-        words = text.split()
-        lines = []
-        current_line = ""
-        for word in words:
-            if len(current_line + " " + word) > max_len:
-                lines.append(current_line)
-                current_line = ""
-            current_line += " " + word
-        lines.append(current_line)
-        return "\n".join(lines)
-
-    def answer_index(self, system, topic, search_index, temp=1, verbose=0):
-
-        # Выборка документов по схожести с вопросом
-        docs = search_index.similarity_search(topic, k=5)
-        if verbose: print('\n ===========================================: ')
-        message_content = re.sub(r'\n{2}', ' ', '\n '.join(
-            [f'\nОтрывок документа №{i + 1}\n=====================' + doc.page_content + '\n' for i, doc in
-             enumerate(docs)]))
-        if (verbose): print('message_content :\n ======================================== \n', message_content)
-
-        messages = [
-            {"role": "system", "content": system + f"{message_content}"},
-            {"role": "user", "content": topic}
-        ]
-
-        # example token count from the function defined above
-        if (verbose): print('\n ===========================================: ')
-        if (verbose): print(
-            f"{self.num_tokens_from_messages(messages, 'gpt-3.5-turbo-0301')} токенов использовано на вопрос")
-
-        completion = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=temp
-        )
-        if (verbose): print('\n ===========================================: ')
-        if (verbose): print(f'{completion["usage"]["total_tokens"]} токенов использовано всего (вопрос-ответ).')
-        if (verbose): print('\n ===========================================: ')
-        if verbose: print('ЦЕНА запроса с ответом :', 0.002 * (completion["usage"]["total_tokens"] / 1000), ' $')
-        if verbose: print('\n ===========================================: ')
-
-        return self.insert_newlines(completion.choices[0].message.content)
-
-        # return completion
-
-    def get_chatgpt_ansver3(self, system, topic, search_index, temp=1):
-
-        messages = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": topic}
-        ]
-
-        completion = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=temp
-        )
-        print('ОТВЕТ : \n', self.insert_newlines(completion.choices[0].message.content))
-
-
-gpt = GPT()
-GPT.set_key()
-marketing_tg_post_index = gpt.load_search_indexes(DOCUMENT+'&rtpof=true&sd=true')
-
-system = '''Теперь вы - AnastasiaBotGPT, специализированный ИИ-эксперт по консультированию и наставничеству для
-расширения бизнеса и роста продаж, работающий в Telegram-боте Анастасии. Опыт: 5+ лет опыта в области
-бизнес-наставничества, стратегий роста продаж и расширения бизнеса.
-Тон и стиль: ваш тон должен быть профессиональным, дружелюбным и соответствовать бренду Anastasia. Используйте ясные и
-увлекательные формулировки, чтобы поддерживать последовательный голос, отражающий философию наставничества Анастасии.
-AnastasiaBotGPT должна консультировать и направлять клиентов, согласно своей роли. Анастасия использует авторскую
-систему масштабирования экспертов «Бабочка» из 39 инструментов продаж, маркетинга и PR-продвижения. Анастасия написала 3
-бизнес-книги по продажам для блогера с аудиторией 300 000 человек. Как продюсер она сделала 21 запуск в 10 нишах на 21
-млн руб.
-Ваш ответ должен содержать контекст ответов клиента и заинтересовать его в сотрудничестве с Анастасией. Вы никогда не
-должны здороваться с клиентом.
-Важная информация: строго соответствовать вашей роли AnastasiaBotGPT, никакой дополнительной информации от себя
-добавлять нельзя, кроме информации из этого документа: '''
-
+gpt.set_key()
+search_indexes = gpt.load_search_indexes(DOCUMENT+'&rtpof=true&sd=true')
 bot = TeleBot(BOT_TOKEN)
-
-
-def create_db():
-    conn = sqlite3.connect('db.sqlite3')
-    cur = conn.cursor()
-    sql = """
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY,
-        is_bot INTEGER,
-        first_name VARCHAR,
-        last_name VARCHAR,
-        username VARCHAR,
-        language_code VARCHAR,
-        is_premium INTEGER,
-        answer_1 VARCHAR,
-        answer_2 VARCHAR,
-        answer_3 VARCHAR,
-        answer_4 VARCHAR
-    );
-    """
-    cur.execute(sql)
-    conn.commit()
+db.create_db()
 
 
 def wait(message):
@@ -231,12 +35,9 @@ def send_invoice(message, label, amount):
     )
 
 
-create_db()
-
-
 @bot.message_handler(commands=['start'])
 def start(message):
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('database.sqlite3')
     cur = conn.cursor()
 
     id = message.from_user.id
@@ -301,7 +102,7 @@ def ok_callback(call: types.CallbackQuery):
 
 
 def sales_step(message):
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('database.sqlite3')
     cur = conn.cursor()
     sql = """
     UPDATE users
@@ -319,7 +120,7 @@ def sales_step(message):
 
 
 def income_step(message):
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('database.sqlite3')
     cur = conn.cursor()
     sql = """
     UPDATE users
@@ -337,7 +138,7 @@ def income_step(message):
 
 
 def guide_step(message):
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('database.sqlite3')
     cur = conn.cursor()
 
     sql = """
@@ -397,7 +198,7 @@ def problem_step(call: types.CallbackQuery):
 
 
 def send_testimonial(message):
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('database.sqlite3')
     cur = conn.cursor()
     sql = """
     UPDATE users
@@ -502,9 +303,9 @@ def successful_payment(message):
 def generate_response(message):
     # get answer from chatgpt
     answer = gpt.answer_index(
-        system,
+        SYSTEM,
         message,
-        marketing_tg_post_index
+        search_indexes,
     )
     return answer
 

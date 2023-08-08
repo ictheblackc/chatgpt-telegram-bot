@@ -2,7 +2,7 @@ import os
 import logging
 import sqlite3
 
-import config
+from config import DB_NAME
 
 
 class Database:
@@ -42,4 +42,4 @@ class Database:
         return sqlite3.connect(f'{self.name}.sqlite3')
 
 
-database = Database(config.DB_NAME)
+database = Database(DB_NAME)
