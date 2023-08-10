@@ -4,7 +4,7 @@ import openai
 import requests
 import re
 import tiktoken
-from config import OPENAI_API_KEY
+from bot.config import OPENAI_API_KEY
 from langchain.docstore.document import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings

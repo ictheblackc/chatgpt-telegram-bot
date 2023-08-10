@@ -2,7 +2,7 @@ import os
 import logging
 import sqlite3
 
-from config import DB_NAME
+from bot.config import DB_NAME
 
 
 class Database:

@@ -1,22 +1,27 @@
-import sqlite3
 import time
 from telebot import TeleBot
 from telebot import types
 from telebot.types import LabeledPrice
-from config import *
-from database import database as db
-from chatgpt import chatgpt as gpt
-from app.message import message as msg
+from .config import *
+from .plugins.database import database as db
+from .plugins.chatgpt import chatgpt as gpt
+from .plugins.message import message as msg
 
 
-gpt.set_key()
-search_indexes = gpt.load_search_indexes(DOCUMENT+'&rtpof=true&sd=true')
+# Create a bot
 bot = TeleBot(BOT_TOKEN)
+# Create a database
 db.create_db()
+# Set OpenAI API key
+gpt.set_key()
+# Load search indexes
+search_indexes = gpt.load_search_indexes(DOCUMENT+'&rtpof=true&sd=true')
 
 
 @bot.message_handler(commands=['start'])
-def start(message):
+def command_start(message):
+    """Start work after starting the bot."""
+    # Get user info
     user_id = message.from_user.id
     is_bot = message.from_user.is_bot
     first_name = message.from_user.first_name
@@ -24,9 +29,9 @@ def start(message):
     username = message.from_user.username
     language_code = message.from_user.language_code
     is_premium = message.from_user.is_premium
-
+    # Insert user into db
     db.insert_user(user_id, is_bot, first_name, last_name, username, language_code, is_premium)
-
+    # Send a welcome message
     text = msg.welcome
     start_button = types.InlineKeyboardButton('Начать', callback_data='start')
     keyboard = types.InlineKeyboardMarkup()
@@ -34,32 +39,12 @@ def start(message):
     bot.send_message(message.chat.id, text, reply_markup=keyboard)
 
 
-def wait(message):
-    text = """Секунду, думаю, как вам лучше ответить 🤔"""
-    message = bot.send_message(message.chat.id, text=text)
-    bot.register_next_step_handler(message, guide_step)
-
-
-def send_invoice(message, label, amount):
-    bot.send_message(message.chat.id,
-                     "Демонстрация приема платежей"
-                     "\n\nПример счета:", parse_mode='Markdown')
-    bot.send_invoice(
-        chat_id=message.chat.id,
-        title='Онлайн-урок',
-        description='Онлайн-урок по продажам на 1 час. Внутри объясняется схема продаж, чтобы закрывать 6 из 10 холодных клиентов с высоким чеком.',
-        invoice_payload='invoice_payload',
-        provider_token=PROVIDER_TOKEN,
-        currency='RUB',
-        prices=[LabeledPrice(label=label, amount=amount)]
-    )
-
-
 @bot.callback_query_handler(func=lambda c: c.data == 'start')
 def start_callback(call: types.CallbackQuery):
+    """First step."""
     text = """Отлично!\n
-Я готов тебе отдать гайд Анастасии "Как создать авторский продукт и продавать его на 1-3 млн руб. на холодную аудиторию"\n
-Но сначала прошу ответить на 3 простых вопроса. Хорошо?"""
+Я готов тебе отдать гайд Анастасии "Как создать авторский продукт и продавать его на 1-3 млн руб. на холодную
+аудиторию"\n Но сначала прошу ответить на 3 простых вопроса. Хорошо?"""
     start_button = types.InlineKeyboardButton('Договорились', callback_data='ok')
     keyboard = types.InlineKeyboardMarkup()
     keyboard.add(start_button)
@@ -68,12 +53,14 @@ def start_callback(call: types.CallbackQuery):
 
 @bot.callback_query_handler(func=lambda c: c.data == 'ok')
 def ok_callback(call: types.CallbackQuery):
+    """Send first question."""
     text = msg.question_1
     message = bot.send_message(chat_id=call.message.chat.id, text=text)
     bot.register_next_step_handler(message, sales_step)
 
 
 def sales_step(message):
+    """Send second question."""
     db.update_user(message.from_user.id, 'answer_1', message.text)
     text = msg.question_2
     message = bot.send_message(message.chat.id, text=text)
@@ -81,6 +68,7 @@ def sales_step(message):
 
 
 def income_step(message):
+    """Send third question."""
     db.update_user(message.from_user.id, 'answer_2', message.text)
     text = msg.question_3
     message = bot.send_message(message.chat.id, text=text)
@@ -88,6 +76,7 @@ def income_step(message):
 
 
 def guide_step(message):
+    """Make first request to ChatGPT API."""
     db.update_user(message.from_user.id, 'answer_3', message.text)
     wait(message)
     user = db.get_user(message.from_user.id)
@@ -97,7 +86,10 @@ def guide_step(message):
     info += 'хотел бы выйти на доход: {}.'.format(user[9])
 
     response = generate_response(
-        f'Вот информация о клиенте: {info}. Используя эту информацию, составь небольшое сообщение клиенту. Не здоровайся с клиентом. В сообщении напиши, что у клиента перспективная ниша и адекватный запрос. Дальше предложи ему забрать гайд. Расскажи, что этот гайд поможет понять, кка отстроиться от конкурентов и стать заметным на рынке.')
+        f'Вот информация о клиенте: {info}. Используя эту информацию, составь небольшое сообщение клиенту. Не'
+        f'здоровайся с клиентом. В сообщении напиши, что у клиента перспективная ниша и адекватный запрос. Дальше'
+        f'предложи ему забрать гайд. Расскажи, что этот гайд поможет понять, кка отстроиться от конкурентов и стать'
+        f'заметным на рынке.')
 
     text = response
     download_button = types.InlineKeyboardButton('Скачать гайд', callback_data='download')
@@ -108,10 +100,12 @@ def guide_step(message):
 
 @bot.callback_query_handler(func=lambda c: c.data == 'download')
 def send_guide(call: types.CallbackQuery):
+    """Send document."""
     file = open("../kivy.pdf", "rb")
     bot.send_document(chat_id=call.message.chat.id, document=file)
-    text = """Подождите, не уходите. У меня есть еще одна схема продаж, которая помогает Анастасии делать 6 из 10 продаж на холодную аудиторию (то есть на тех, кто только подписался на ее блог)\n
-Интересно?"""
+    text = """Подождите, не уходите. У меня есть еще одна схема продаж, которая помогает Анастасии делать 6 из 10
+    продаж на холодную аудиторию (то есть на тех, кто только подписался на ее блог)\n
+    Интересно?"""
     interesting_button = types.InlineKeyboardButton('Да, интересно', callback_data='interesting')
     keyboard = types.InlineKeyboardMarkup()
     keyboard.add(interesting_button)
@@ -120,53 +114,28 @@ def send_guide(call: types.CallbackQuery):
 
 @bot.callback_query_handler(func=lambda c: c.data == 'interesting')
 def problem_step(call: types.CallbackQuery):
-    text = """Отлично!\n
-Сначала расскажи, что тебе сейчас мешает, по твоему мнению, вдвое-втрое увеличить продажи?"""
+    """Send fourth question."""
+    text = msg.question_4
     message = bot.send_message(chat_id=call.message.chat.id, text=text)
     bot.register_next_step_handler(message, send_testimonial)
 
 
 def send_testimonial(message):
-    conn = sqlite3.connect('../database.sqlite3')
-    cur = conn.cursor()
-    sql = """
-    UPDATE users
-    SET answer_4 = '{}'
-    WHERE id = '{}';
-    """.format(
-        message.text,
-        message.from_user.id
-    )
-    cur.execute(sql)
-    conn.commit()
-
+    """Send a message and video with description."""
+    db.update_user(message.from_user.id, 'answer_4', message.text)
     wait(message)
-
-    sql = """
-    SELECT answer_1, answer_4
-    FROM users
-    WHERE id = '{}';
-    """.format(
-        message.from_user.id
-    )
-    cur.execute(sql)
-    answers = cur.fetchall()
+    user = db.get_user(message.from_user.id)
     info = ''
-    for answer in answers:
-        info += f'ниша и средний чек продукта: {answer[0]}; проблема клиента: {answer[1]}'
-
+    info += 'Ниша и средний чек продукта: {}; '.format(user[7])
+    info += 'проблема клиента: {}.'.format(user[10])
     response = generate_response(
-        f'Вот информация о клиенте: {info}. Используя эту информацию, составь небольшое сообщение клиенту. Не здоровайся с клиентом. В сообщении напиши, что у Анастасии есть сильный эфир, который поможет преодолеть ту пролбему, о которой написал клиент. Предложи посмотреть отзыв про эфир.')
-
+        f'Вот информация о клиенте: {info}. Используя эту информацию, составь небольшое сообщение клиенту. Не'
+        f'здоровайся с клиентом. В сообщении напиши, что у Анастасии есть сильный эфир, который поможет преодолеть ту'
+        f'пролбему, о которой написал клиент. Предложи посмотреть отзыв про эфир.')
     text = response
     bot.send_message(message.chat.id, text=text)
     bot.send_video(message.chat.id, video=open('../video.MP4', 'rb'), supports_streaming=True)
-    text = """Внутри эфира Анастасия разбирает:\n
-- Как сейчас люди принимаюсь решение о покупке инфопродуктов и услуг?
-- Почему ценность продукта уже не играет главной роли при принятии решения купить?
-- Как продавать холодной аудитории, которая только подписалась на твой блог?
-- Как на микроблоге с охватами от 200 просмотров стабильно продавать на + 1 млн руб. в месяц.\n
-Что скажешь? Интересно?"""
+    text = msg.video_description
     yes_button = types.InlineKeyboardButton('Да', callback_data='first_yes')
     keyboard = types.InlineKeyboardMarkup()
     keyboard.add(yes_button)
@@ -175,7 +144,8 @@ def send_testimonial(message):
 
 @bot.callback_query_handler(func=lambda c: c.data == 'first_yes')
 def offer_step_1(call: types.CallbackQuery):
-    text = msg.offer
+    """Send first offer's part."""
+    text = msg.offer_1
     yes_button = types.InlineKeyboardButton('Да', callback_data='second_yes')
     keyboard = types.InlineKeyboardMarkup()
     keyboard.add(yes_button)
@@ -184,9 +154,8 @@ def offer_step_1(call: types.CallbackQuery):
 
 @bot.callback_query_handler(func=lambda c: c.data == 'second_yes')
 def offer_step_2(call: types.CallbackQuery):
-    text = """На 48 часов эфир можно забрать за 399 руб.\n
-Навсегда за 999 руб.\n
-Какой вариант подходит?"""
+    """Send second offer's part."""
+    text = msg.offer_2
     first_button = types.InlineKeyboardButton('399', callback_data='first_price')
     second_button = types.InlineKeyboardButton('999', callback_data='second_price')
     keyboard = types.InlineKeyboardMarkup()
@@ -197,16 +166,19 @@ def offer_step_2(call: types.CallbackQuery):
 
 @bot.callback_query_handler(func=lambda c: c.data == 'first_price')
 def offer_step_cheap(call: types.CallbackQuery):
+    """Send invoice for first link."""
     send_invoice(call.message, 'Онлайн-урок', 39900)
 
 
 @bot.callback_query_handler(func=lambda c: c.data == 'second_price')
 def offer_step_expensive(call: types.CallbackQuery):
+    """Send invoice for second link."""
     send_invoice(call.message, 'Онлайн-урок', 99900)
 
 
 @bot.pre_checkout_query_handler(func=lambda query: True)
 def checkout(pre_checkout_query):
+    """Answer the PreQecheckoutQuery."""
     bot.answer_pre_checkout_query(
         pre_checkout_query.id,
         ok=True,
@@ -215,6 +187,7 @@ def checkout(pre_checkout_query):
 
 @bot.message_handler(content_types=['successful_payment'])
 def successful_payment(message):
+    """Confirms the successful payment."""
     delete = False
     if message.successful_payment.total_amount / 100 == 399:
         text = FIRST_LINK
@@ -227,8 +200,35 @@ def successful_payment(message):
         bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
 
 
+def wait(message):
+    """Send a message asking you to wait."""
+    text = msg.wait
+    message = bot.send_message(message.chat.id, text=text)
+    bot.register_next_step_handler(message, guide_step)
+
+
+def send_invoice(message, label, amount):
+    """Send an invoice with the specific data."""
+    chat_id = message.chat.id
+    title = 'Онлайн-урок'
+    description = 'Онлайн-урок по продажам на 1 час. Внутри объясняется схема продаж, чтобы закрывать 6 из 10' \
+                  'холодных клиентов с высоким чеком.'
+    invoice_payload = 'Online lesson'
+    provider_token = PROVIDER_TOKEN
+    currency = 'RUB'
+    bot.send_invoice(
+        chat_id=chat_id,
+        title=title,
+        description=description,
+        invoice_payload=invoice_payload,
+        provider_token=provider_token,
+        currency=currency,
+        prices=[LabeledPrice(label=label, amount=amount)]
+    )
+
+
 def generate_response(message):
-    # get answer from chatgpt
+    """Generate response from ChatGPT."""
     answer = gpt.answer_index(
         SYSTEM,
         message,
