@@ -101,7 +101,7 @@ def guide_step(message):
 @bot.callback_query_handler(func=lambda c: c.data == 'download')
 def send_guide(call: types.CallbackQuery):
     """Send document."""
-    file = open("../kivy.pdf", "rb")
+    file = open("../assets/document.pdf", "rb")
     bot.send_document(chat_id=call.message.chat.id, document=file)
     text = """Подождите, не уходите. У меня есть еще одна схема продаж, которая помогает Анастасии делать 6 из 10
     продаж на холодную аудиторию (то есть на тех, кто только подписался на ее блог)\n
@@ -134,7 +134,7 @@ def send_testimonial(message):
         f'пролбему, о которой написал клиент. Предложи посмотреть отзыв про эфир.')
     text = response
     bot.send_message(message.chat.id, text=text)
-    bot.send_video(message.chat.id, video=open('../video.MP4', 'rb'), supports_streaming=True)
+    bot.send_video(message.chat.id, video=open('../assets/video.MP4', 'rb'), supports_streaming=True)
     text = msg.video_description
     yes_button = types.InlineKeyboardButton('Да', callback_data='first_yes')
     keyboard = types.InlineKeyboardMarkup()

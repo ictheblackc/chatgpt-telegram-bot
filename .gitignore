@@ -163,4 +163,4 @@ cython_debug/
 .chroma/
 bot/config.py
 kivy.pdf
-video.MP4
+assets/video.MP4
