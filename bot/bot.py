@@ -2,20 +2,20 @@ import time
 from telebot import TeleBot
 from telebot import types
 from telebot.types import LabeledPrice
-from .config import *
+from .config import Config as conf
 from .plugins.database import database as db
 from .plugins.chatgpt import chatgpt as gpt
 from .plugins.message import message as msg
 
 
 # Create a bot
-bot = TeleBot(BOT_TOKEN)
+bot = TeleBot(conf.BOT_TOKEN)
 # Create a database
 db.create_db()
 # Set OpenAI API key
 gpt.set_key()
 # Load search indexes
-search_indexes = gpt.load_search_indexes(DOCUMENT+'&rtpof=true&sd=true')
+search_indexes = gpt.load_search_indexes(conf.DOCUMENT+'&rtpof=true&sd=true')
 
 
 @bot.message_handler(commands=['start'])
@@ -190,13 +190,13 @@ def successful_payment(message):
     """Confirms the successful payment."""
     delete = False
     if message.successful_payment.total_amount / 100 == 399:
-        text = FIRST_LINK
+        text = conf.FIRST_LINK
         delete = True
     else:
-        text = SECOND_LINK
+        text = conf.SECOND_LINK
     message = bot.send_message(message.chat.id, text=text)
     if delete:
-        time.sleep(DELETE_LINK_TIME)
+        time.sleep(conf.DELETE_LINK_TIME)
         bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
 
 
@@ -214,7 +214,7 @@ def send_invoice(message, label, amount):
     description = 'Онлайн-урок по продажам на 1 час. Внутри объясняется схема продаж, чтобы закрывать 6 из 10' \
                   'холодных клиентов с высоким чеком.'
     invoice_payload = 'Online lesson'
-    provider_token = PROVIDER_TOKEN
+    provider_token = conf.PROVIDER_TOKEN
     currency = 'RUB'
     bot.send_invoice(
         chat_id=chat_id,
@@ -230,7 +230,7 @@ def send_invoice(message, label, amount):
 def generate_response(message):
     """Generate response from ChatGPT."""
     answer = gpt.answer_index(
-        SYSTEM,
+        conf.SYSTEM,
         message,
         search_indexes,
     )

@@ -4,7 +4,7 @@ import openai
 import requests
 import re
 import tiktoken
-from bot.config import OPENAI_API_KEY
+from bot.config import Config as conf
 from langchain.docstore.document import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
@@ -17,7 +17,7 @@ class ChatGPT:
 
     @classmethod
     def set_key(cls):
-        openai.api_key = OPENAI_API_KEY
+        openai.api_key = conf.OPENAI_API_KEY
         os.environ['OPENAI_API_KEY'] = openai.api_key
         logging.info('OpenAI API key saved')
 

@@ -2,7 +2,7 @@ import os
 import logging
 import sqlite3
 
-from bot.config import DB_NAME
+from bot.config import Config as conf
 
 
 class Database:
@@ -94,4 +94,4 @@ class Database:
         logging.info(f'User with id {user_id} updated')
 
 
-database = Database(DB_NAME)
+database = Database(conf.DB_NAME)
