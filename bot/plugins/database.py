@@ -34,6 +34,15 @@ class Database:
         """
         cursor.execute(sql)
         connection.commit()
+        sql = """
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY,
+            key VARCHAR,
+            value VARCHAR
+        );
+        """
+        cursor.execute(sql)
+        connection.commit()
         cursor.close()
 
     def connection(self):

@@ -24,6 +24,12 @@ def command_admin(message):
     admin.command_admin(bot, message)
 
 
+@bot.callback_query_handler(func=lambda call: True)
+def admin_callback_query_handler(call):
+    if call.data == "change_welcome":
+        bot.answer_callback_query(call.id, "Меняем!")
+
+
 @bot.message_handler(commands=['start'])
 def command_start(message):
     """Start work after starting the bot."""

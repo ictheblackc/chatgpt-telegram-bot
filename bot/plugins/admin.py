@@ -1,4 +1,5 @@
 from .database import database as db
+from .keyboard import keyboard as kb
 
 
 class Admin:
@@ -11,6 +12,8 @@ class Admin:
         user_id = user[0]
         if self._is_admin(user_id):
             self.admin_mode = True
+            bot.send_message(message.chat.id, 'Настройки', reply_markup=kb.admin_menu())
+
 
     def _is_admin(self, user_id):
         user = db.get_user(user_id=user_id)
