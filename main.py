@@ -1,5 +1,9 @@
 from bot.bot import bot
 
 
-if __name__ == "__main__":
+def main():
     bot.infinity_polling()
+
+
+if __name__ == "__main__":
+    main()

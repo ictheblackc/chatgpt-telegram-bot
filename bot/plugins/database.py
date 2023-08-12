@@ -25,6 +25,7 @@ class Database:
             username VARCHAR,
             language_code VARCHAR,
             is_premium INTEGER,
+            role VARCHAR,
             answer_1 VARCHAR,
             answer_2 VARCHAR,
             answer_3 VARCHAR,
@@ -41,18 +42,7 @@ class Database:
             self.create_db()
         return sqlite3.connect(f'{self.name}.sqlite3', check_same_thread=False)
 
-    def _execute_query(self, query, select=False):
-        cursor = self._conn.cursor()
-        cursor.execute(query)
-        if select:
-            result = cursor.fetchall()
-            cursor.close()
-            return result
-        else:
-            self._conn.commit()
-        cursor.close()
-
-    def insert_user(self, user_id, is_bot, first_name, last_name, username, language_code, is_premium):
+    def insert_user(self, user_id, is_bot, first_name, last_name, username, language_code, is_premium, role):
         sql = f"""
         INSERT OR IGNORE INTO users (
             id,
@@ -61,7 +51,8 @@ class Database:
             last_name,
             username,
             language_code,
-            is_premium
+            is_premium,
+            role
         ) VALUES (
             '{user_id}',
             '{is_bot}',
@@ -69,7 +60,8 @@ class Database:
             '{last_name}',
             '{username}',
             '{language_code}',
-            '{is_premium}'
+            '{is_premium}',
+            '{role}'
         );
         """
         self._execute_query(sql)
@@ -92,6 +84,17 @@ class Database:
         """
         self._execute_query(sql)
         logging.info(f'User with id {user_id} updated')
+
+    def _execute_query(self, query, select=False):
+        cursor = self._conn.cursor()
+        cursor.execute(query)
+        if select:
+            result = cursor.fetchall()
+            cursor.close()
+            return result
+        else:
+            self._conn.commit()
+        cursor.close()
 
 
 database = Database(conf.DB_NAME)

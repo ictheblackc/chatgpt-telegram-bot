@@ -6,6 +6,7 @@ from .config import Config as conf
 from .plugins.database import database as db
 from .plugins.chatgpt import chatgpt as gpt
 from .plugins.message import message as msg
+from .plugins.admin import admin
 
 
 # Create a bot
@@ -16,6 +17,11 @@ db.create_db()
 gpt.set_key()
 # Load search indexes
 search_indexes = gpt.load_search_indexes(conf.DOCUMENT+'&rtpof=true&sd=true')
+
+
+@bot.message_handler(commands=['admin'])
+def command_admin(message):
+    admin.command_admin(bot, message)
 
 
 @bot.message_handler(commands=['start'])
@@ -29,8 +35,18 @@ def command_start(message):
     username = message.from_user.username
     language_code = message.from_user.language_code
     is_premium = message.from_user.is_premium
+    role = 'user'
     # Insert user into db
-    db.insert_user(user_id, is_bot, first_name, last_name, username, language_code, is_premium)
+    db.insert_user(
+        user_id=user_id,
+        is_bot=is_bot,
+        first_name=first_name,
+        last_name=last_name,
+        username=username,
+        language_code=language_code,
+        is_premium=is_premium,
+        role=role,
+    )
     # Send a welcome message
     text = msg.welcome
     start_button = types.InlineKeyboardButton('Начать', callback_data='start')
