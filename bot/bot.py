@@ -7,6 +7,7 @@ from .plugins.database import database as db
 from .plugins.chatgpt import chatgpt as gpt
 from .plugins.message import message as msg
 from .plugins.admin import admin
+from .plugins.keyboard import keyboard as kb
 
 
 # Create a bot
@@ -26,8 +27,18 @@ def command_admin(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def admin_callback_query_handler(call):
-    if call.data == "change_welcome":
-        bot.answer_callback_query(call.id, "Меняем!")
+    if call.data == 'change_welcome':
+        text = 'Введите новое приветствие'
+        send = bot.send_message(call.message.chat.id, text)
+        bot.register_next_step_handler(send, update_welcome)
+    elif call.data == 'exit':
+        text = 'Выход'
+        bot.send_message(call.message.chat.id, text)
+
+def update_welcome(message):
+    value = message.text
+    db.update_settings_by_key('welcome', value)
+    bot.send_message(message.chat.id, 'Текcт приветствия обновлен', reply_markup=kb.admin_menu())
 
 
 @bot.message_handler(commands=['start'])

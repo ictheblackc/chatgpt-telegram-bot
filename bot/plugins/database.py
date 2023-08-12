@@ -94,6 +94,24 @@ class Database:
         self._execute_query(sql)
         logging.info(f'User with id {user_id} updated')
 
+    def get_settings_by_key(self, key):
+        sql = f"""
+        SELECT *
+        FROM settings
+        WHERE key = '{key}';
+        """
+        result = self._execute_query(sql, True)
+        return result[0]
+
+    def update_settings_by_key(self, key, value):
+        sql = f"""
+        UPDATE settings
+        SET value = '{value}'
+        WHERE key = '{key}';
+        """
+        self._execute_query(sql)
+        logging.info(f'Settings with id {key} updated')
+
     def _execute_query(self, query, select=False):
         cursor = self._conn.cursor()
         cursor.execute(query)

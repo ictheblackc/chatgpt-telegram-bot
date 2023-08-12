@@ -12,8 +12,12 @@ class Admin:
         user_id = user[0]
         if self._is_admin(user_id):
             self.admin_mode = True
-            bot.send_message(message.chat.id, 'Настройки', reply_markup=kb.admin_menu())
+            bot.send_message(message.chat.id, 'Выберите действие', reply_markup=kb.admin_menu())
 
+    def update_welcome(self, bot, message):
+        value = message.text
+        db.update_settings_by_key('welcome', value)
+        bot.send_message(message.chat.id, 'Текcт приветствия обновлен', reply_markup=kb.admin_menu())
 
     def _is_admin(self, user_id):
         user = db.get_user(user_id=user_id)
