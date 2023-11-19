@@ -162,5 +162,3 @@ cython_debug/
 # Custom
 .chroma/
 bot/config.py
-kivy.pdf
-assets/video.MP4

@@ -1,13 +1,14 @@
 import time
+import os
 from telebot import TeleBot
 from telebot import types
 from telebot.types import LabeledPrice
 from .config import Config as conf
-from .plugins.database import database as db
-from .plugins.chatgpt import chatgpt as gpt
-from .plugins.message import message as msg
-from .plugins.admin import admin
-from .plugins.keyboard import keyboard as kb
+from .modules.database import database as db
+from .modules.chatgpt import chatgpt as gpt
+from .modules.message import message as msg
+from .modules.admin import admin
+from .modules.keyboard import keyboard as kb
 
 
 # Create a bot
@@ -20,25 +21,26 @@ gpt.set_key()
 search_indexes = gpt.load_search_indexes(conf.DOCUMENT+'&rtpof=true&sd=true')
 
 
-@bot.message_handler(commands=['admin'])
-def command_admin(message):
-    admin.command_admin(bot, message)
+# @bot.message_handler(commands=['admin'])
+# def command_admin(message):
+#     admin.command_admin(bot, message)
 
 
-@bot.callback_query_handler(func=lambda call: True)
-def admin_callback_query_handler(call):
-    if call.data == 'change_welcome':
-        text = 'Введите новое приветствие'
-        send = bot.send_message(call.message.chat.id, text)
-        bot.register_next_step_handler(send, update_welcome)
-    elif call.data == 'exit':
-        text = 'Выход'
-        bot.send_message(call.message.chat.id, text)
+# @bot.callback_query_handler(func=lambda call: True)
+# def admin_callback_query_handler(call):
+#     if call.data == 'change_welcome':
+#         text = 'Введите новое приветствие'
+#         send = bot.send_message(call.message.chat.id, text)
+#         bot.register_next_step_handler(send, update_welcome)
+#     elif call.data == 'exit':
+#         text = 'Выход'
+#         bot.send_message(call.message.chat.id, text)
 
-def update_welcome(message):
-    value = message.text
-    db.update_settings_by_key('welcome', value)
-    bot.send_message(message.chat.id, 'Текcт приветствия обновлен', reply_markup=kb.admin_menu())
+
+# def update_welcome(message):
+#     value = message.text
+#     db.update_settings_by_key('welcome', value)
+#     bot.send_message(message.chat.id, 'Текcт приветствия обновлен', reply_markup=kb.admin_menu())
 
 
 @bot.message_handler(commands=['start'])
@@ -64,20 +66,23 @@ def command_start(message):
         is_premium=is_premium,
         role=role,
     )
-    # Send a welcome message
-    text = msg.welcome
-    start_button = types.InlineKeyboardButton('Начать', callback_data='start')
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(start_button)
-    bot.send_message(message.chat.id, text, reply_markup=keyboard)
+    user = db.get_user(message.from_user.id)
+    if user[8] != '':
+        text = 'Вы уже запускали бота :('
+        bot.send_message(message.chat.id, text)
+    else:
+        # Send a welcome message
+        text = msg.welcome
+        start_button = types.InlineKeyboardButton('Начать', callback_data='start')
+        keyboard = types.InlineKeyboardMarkup()
+        keyboard.add(start_button)
+        bot.send_message(message.chat.id, text, reply_markup=keyboard)
 
 
 @bot.callback_query_handler(func=lambda c: c.data == 'start')
 def start_callback(call: types.CallbackQuery):
     """First step."""
-    text = """Отлично!\n
-Я готов тебе отдать гайд Анастасии "Как создать авторский продукт и продавать его на 1-3 млн руб. на холодную
-аудиторию"\n Но сначала прошу ответить на 3 простых вопроса. Хорошо?"""
+    text = msg.guide
     start_button = types.InlineKeyboardButton('Договорились', callback_data='ok')
     keyboard = types.InlineKeyboardMarkup()
     keyboard.add(start_button)
@@ -114,31 +119,32 @@ def guide_step(message):
     wait(message)
     user = db.get_user(message.from_user.id)
     info = ''
-    info += 'Ниша и средний чек продукта: {}; '.format(user[7])
-    info += 'в среднем продаж в месяц с блога: {}; '.format(user[8])
-    info += 'хотел бы выйти на доход: {}.'.format(user[9])
+    info += 'Ниша и средний чек продукта: {}; '.format(user[8])
+    info += 'в среднем число продаж в месяц с блога: {}; '.format(user[9])
+    info += 'хотел бы выйти на доход: {}.'.format(user[10])
+    instruction = conf.INSTRUCTION
 
     response = generate_response(
-        f'Вот информация о клиенте: {info}. Используя эту информацию, составь небольшое сообщение клиенту. Не'
-        f'здоровайся с клиентом. В сообщении напиши, что у клиента перспективная ниша и адекватный запрос. Дальше'
-        f'предложи ему забрать гайд. Расскажи, что этот гайд поможет понять, кка отстроиться от конкурентов и стать'
-        f'заметным на рынке.')
+        f'Бот-помощник Анастасии Любарской должен консультировать и направлять клиентов, согласно своей роли и —> {instruction}. Эти люди'
+        f'ищут помощи в расширении своего бизнеса или увеличении продаж продукции. Вам будет предоставлена информация'
+        f'о потенциального клиенте —> {info}. Составьте свой ответ с учетом этой информации, на какой доход хотел бы выйти клиент.'
+        f'Ваш ответ должен быть не длинее 130 символов, а также должен содержать контекст ответов клиента и заинтересовать его в сотрудничестве с Анастасией.')
 
     text = response
-    download_button = types.InlineKeyboardButton('Скачать гайд', callback_data='download')
+    read_button = types.InlineKeyboardButton('Читать статью', callback_data='read')
     keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(download_button)
+    keyboard.add(read_button)
     bot.send_message(message.chat.id, text=text, reply_markup=keyboard)
 
 
-@bot.callback_query_handler(func=lambda c: c.data == 'download')
+@bot.callback_query_handler(func=lambda c: c.data == 'read')
 def send_guide(call: types.CallbackQuery):
-    """Send document."""
-    file = open("../assets/document.pdf", "rb")
-    bot.send_document(chat_id=call.message.chat.id, document=file)
-    text = """Подождите, не уходите. У меня есть еще одна схема продаж, которая помогает Анастасии делать 6 из 10
-    продаж на холодную аудиторию (то есть на тех, кто только подписался на ее блог)\n
-    Интересно?"""
+    """Send link."""
+    #file = open(os.getcwd()+'/assets/document.pdf', 'rb')
+    #bot.send_document(chat_id=call.message.chat.id, document=file)
+    text = 'Ссылка - https://mighty-prawn-26c.notion.site/9-1-3-b669f7638a2041059b240c5500e74e8d?pvs=4'
+    bot.send_message(chat_id=call.message.chat.id, text=text)
+    text = msg.donotescape
     interesting_button = types.InlineKeyboardButton('Да, интересно', callback_data='interesting')
     keyboard = types.InlineKeyboardMarkup()
     keyboard.add(interesting_button)
@@ -156,18 +162,22 @@ def problem_step(call: types.CallbackQuery):
 def send_testimonial(message):
     """Send a message and video with description."""
     db.update_user(message.from_user.id, 'answer_4', message.text)
-    wait(message)
     user = db.get_user(message.from_user.id)
     info = ''
-    info += 'Ниша и средний чек продукта: {}; '.format(user[7])
-    info += 'проблема клиента: {}.'.format(user[10])
+    info += 'Ниша и средний чек продукта: {}; '.format(user[8])
+    info += 'проблема клиента: {}.'.format(user[11])
     response = generate_response(
-        f'Вот информация о клиенте: {info}. Используя эту информацию, составь небольшое сообщение клиенту. Не'
-        f'здоровайся с клиентом. В сообщении напиши, что у Анастасии есть сильный эфир, который поможет преодолеть ту'
-        f'пролбему, о которой написал клиент. Предложи посмотреть отзыв про эфир.')
+        f'Бот-помощник Анастасии Любарской продолжаете консультировать и направлять клиентов, согласно своей роли. Эти люди ищут'
+        f'помощи в расширении своего бизнеса или увеличении продаж продукции. Вам будет предоставлены ответы'
+        f'потенциального клиента —>{info}. В них будут ответы клиента'
+        f'Ваш ответ должен быть такого формата —> ```-Последовательно сформируйте ответ согласно вышесказанной'
+        f'инструкции. -Уложитесь в 130 слов. -Ваш ответ должен заканчиваться фиксированным текстом '
+        f'У Анастасии есть очень сильный эфир с конкретными инструментами продаж, которые как раз покажут, как в твоей'
+        f'нише увеличить продажи.` ``` **Важная информация:** Строго соответствовать вашей роли Бот-помощник Анастасии Любарской, никакой'
+        f'дополнительной информации от себя добавлять нельзя')
     text = response
     bot.send_message(message.chat.id, text=text)
-    bot.send_video(message.chat.id, video=open('../assets/video.MP4', 'rb'), supports_streaming=True)
+    bot.send_video(message.chat.id, video=open(os.getcwd()+'/assets/video.MP4', 'rb'), supports_streaming=True)
     text = msg.video_description
     yes_button = types.InlineKeyboardButton('Да', callback_data='first_yes')
     keyboard = types.InlineKeyboardMarkup()
@@ -200,13 +210,25 @@ def offer_step_2(call: types.CallbackQuery):
 @bot.callback_query_handler(func=lambda c: c.data == 'first_price')
 def offer_step_cheap(call: types.CallbackQuery):
     """Send invoice for first link."""
-    send_invoice(call.message, 'Онлайн-урок', 39900)
+    #send_invoice(call.message, 'Онлайн-урок', 39900)
+    text = """
+    Вот ссылка на оплату\n
+https://robo.market/product/3008432\n
+Спасибо за ваш выбор. После оплаты Анастасия пришлет вам ссылку на эфир 🦋
+    """
+    bot.send_message(chat_id=call.message.chat.id, text=text)
 
 
 @bot.callback_query_handler(func=lambda c: c.data == 'second_price')
 def offer_step_expensive(call: types.CallbackQuery):
     """Send invoice for second link."""
-    send_invoice(call.message, 'Онлайн-урок', 99900)
+    #send_invoice(call.message, 'Онлайн-урок', 99900)
+    text = """
+    Вот ссылка на оплату\n
+https://robo.market/product/3008433\n
+Спасибо за ваш выбор. После оплаты Анастасия пришлет вам ссылку на эфир 🦋
+    """
+    bot.send_message(chat_id=call.message.chat.id, text=text)
 
 
 @bot.pre_checkout_query_handler(func=lambda query: True)
@@ -237,7 +259,7 @@ def wait(message):
     """Send a message asking you to wait."""
     text = msg.wait
     message = bot.send_message(message.chat.id, text=text)
-    bot.register_next_step_handler(message, guide_step)
+    #bot.register_next_step_handler(message, guide_step)
 
 
 def send_invoice(message, label, amount):
